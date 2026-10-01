@@ -4,6 +4,9 @@ EXECUTABLE := LightweightChat
 BUNDLE := $(APP_NAME).app
 BUNDLE_IDENTIFIER := org.peterc.lightweight
 CONFIGURATION ?= release
+# Swift 6.4's default swiftbuild engine stamps the deployment target as the SDK
+# version, which makes macOS use legacy controls. The native engine preserves it.
+SWIFT_BUILD_FLAGS ?= --build-system native
 SIGNING_IDENTITY ?= Apple Development
 DISTRIBUTION_SIGNING_IDENTITY ?= Developer ID Application
 DIST_DIR := dist
@@ -21,7 +24,7 @@ LSREGISTER := /System/Library/Frameworks/CoreServices.framework/Frameworks/Launc
 all: register
 
 build:
-	swift build -c $(CONFIGURATION) --package-path $(PACKAGE_DIR)
+	swift build $(SWIFT_BUILD_FLAGS) -c $(CONFIGURATION) --package-path $(PACKAGE_DIR)
 
 bundle: build
 	mkdir -p $(BUNDLE)/Contents/MacOS $(BUNDLE)/Contents/Resources
@@ -76,11 +79,11 @@ release-check:
 dist: dist-verify
 
 dist-build:
-	swift build -c release $(DIST_ARCH_FLAGS) --package-path $(PACKAGE_DIR)
+	swift build $(SWIFT_BUILD_FLAGS) -c release $(DIST_ARCH_FLAGS) --package-path $(PACKAGE_DIR)
 
 dist-bundle: dist-build
 	mkdir -p $(DIST_BUNDLE)/Contents/MacOS $(DIST_BUNDLE)/Contents/Resources
-	bin_dir="$$(swift build -c release $(DIST_ARCH_FLAGS) --package-path $(PACKAGE_DIR) --show-bin-path)"; \
+	bin_dir="$$(swift build $(SWIFT_BUILD_FLAGS) -c release $(DIST_ARCH_FLAGS) --package-path $(PACKAGE_DIR) --show-bin-path)"; \
 	cp "$$bin_dir/$(EXECUTABLE)" $(DIST_BUNDLE)/Contents/MacOS/$(EXECUTABLE)
 	cp $(PACKAGE_DIR)/Resources/Info.plist $(DIST_BUNDLE)/Contents/Info.plist
 	cp $(PACKAGE_DIR)/Resources/AppIcon.icns $(DIST_BUNDLE)/Contents/Resources/AppIcon.icns
