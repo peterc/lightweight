@@ -11,7 +11,8 @@ SIGNING_IDENTITY ?= Apple Development
 DISTRIBUTION_SIGNING_IDENTITY ?= Developer ID Application
 DIST_DIR := dist
 DIST_BUNDLE := $(DIST_DIR)/$(BUNDLE)
-DIST_ARCH_FLAGS := --arch arm64 --arch x86_64
+DIST_ARM64_FLAGS := --triple arm64-apple-macosx14.0 --scratch-path $(PACKAGE_DIR)/.build/dist-arm64
+DIST_X86_64_FLAGS := --triple x86_64-apple-macosx14.0 --scratch-path $(PACKAGE_DIR)/.build/dist-x86_64
 INFO_PLIST := $(PACKAGE_DIR)/Resources/Info.plist
 CURRENT_VERSION := $(shell /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" $(INFO_PLIST))
 CURRENT_BUILD := $(shell /usr/libexec/PlistBuddy -c "Print :CFBundleVersion" $(INFO_PLIST))
@@ -80,12 +81,15 @@ release-check:
 dist: dist-verify
 
 dist-build:
-	swift build $(SWIFT_BUILD_FLAGS) -c release $(DIST_ARCH_FLAGS) --package-path $(PACKAGE_DIR)
+	# Build each architecture with the native engine to preserve SDK metadata.
+	swift build $(SWIFT_BUILD_FLAGS) -c release $(DIST_ARM64_FLAGS) --package-path $(PACKAGE_DIR)
+	swift build $(SWIFT_BUILD_FLAGS) -c release $(DIST_X86_64_FLAGS) --package-path $(PACKAGE_DIR)
 
 dist-bundle: dist-build
 	mkdir -p $(DIST_BUNDLE)/Contents/MacOS $(DIST_BUNDLE)/Contents/Resources
-	bin_dir="$$(swift build $(SWIFT_BUILD_FLAGS) -c release $(DIST_ARCH_FLAGS) --package-path $(PACKAGE_DIR) --show-bin-path)"; \
-	cp "$$bin_dir/$(EXECUTABLE)" $(DIST_BUNDLE)/Contents/MacOS/$(EXECUTABLE)
+	arm64_bin_dir="$$(swift build $(SWIFT_BUILD_FLAGS) -c release $(DIST_ARM64_FLAGS) --package-path $(PACKAGE_DIR) --show-bin-path)"; \
+	x86_64_bin_dir="$$(swift build $(SWIFT_BUILD_FLAGS) -c release $(DIST_X86_64_FLAGS) --package-path $(PACKAGE_DIR) --show-bin-path)"; \
+	lipo -create "$$arm64_bin_dir/$(EXECUTABLE)" "$$x86_64_bin_dir/$(EXECUTABLE)" -output $(DIST_BUNDLE)/Contents/MacOS/$(EXECUTABLE)
 	cp $(PACKAGE_DIR)/Resources/Info.plist $(DIST_BUNDLE)/Contents/Info.plist
 	cp $(PACKAGE_DIR)/Resources/AppIcon.icns $(DIST_BUNDLE)/Contents/Resources/AppIcon.icns
 	cp $(PACKAGE_DIR)/Resources/models.json $(DIST_BUNDLE)/Contents/Resources/models.json
@@ -95,7 +99,8 @@ dist-sign: dist-bundle
 
 dist-verify: dist-sign
 	codesign --verify --deep --strict --verbose=2 $(DIST_BUNDLE)
-	lipo $(DIST_BUNDLE)/Contents/MacOS/$(EXECUTABLE) -verify_arch arm64 x86_64
+	lipo $(DIST_BUNDLE)/Contents/MacOS/$(EXECUTABLE) -verify_arch arm64
+	lipo $(DIST_BUNDLE)/Contents/MacOS/$(EXECUTABLE) -verify_arch x86_64
 
 dmg: dist-verify
 	dmg_stage="$$(mktemp -d /tmp/lightweight-dmg.XXXXXX)"; \
