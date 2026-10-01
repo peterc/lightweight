@@ -31,6 +31,7 @@ bundle: build
 	cp $(PACKAGE_DIR)/.build/$(CONFIGURATION)/$(EXECUTABLE) $(BUNDLE)/Contents/MacOS/$(EXECUTABLE)
 	cp $(PACKAGE_DIR)/Resources/Info.plist $(BUNDLE)/Contents/Info.plist
 	cp $(PACKAGE_DIR)/Resources/AppIcon.icns $(BUNDLE)/Contents/Resources/AppIcon.icns
+	cp $(PACKAGE_DIR)/Resources/models.json $(BUNDLE)/Contents/Resources/models.json
 
 sign: bundle
 	codesign --force --sign "$(SIGNING_IDENTITY)" --identifier $(BUNDLE_IDENTIFIER) $(BUNDLE)
@@ -87,6 +88,7 @@ dist-bundle: dist-build
 	cp "$$bin_dir/$(EXECUTABLE)" $(DIST_BUNDLE)/Contents/MacOS/$(EXECUTABLE)
 	cp $(PACKAGE_DIR)/Resources/Info.plist $(DIST_BUNDLE)/Contents/Info.plist
 	cp $(PACKAGE_DIR)/Resources/AppIcon.icns $(DIST_BUNDLE)/Contents/Resources/AppIcon.icns
+	cp $(PACKAGE_DIR)/Resources/models.json $(DIST_BUNDLE)/Contents/Resources/models.json
 
 dist-sign: dist-bundle
 	codesign --force --options runtime --timestamp --sign "$(DISTRIBUTION_SIGNING_IDENTITY)" --identifier $(BUNDLE_IDENTIFIER) $(DIST_BUNDLE)

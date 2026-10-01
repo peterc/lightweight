@@ -39,6 +39,11 @@ make
 make run
 ```
 
+The built-in model list and old model ID replacements live in
+[`LightweightChat/Resources/models.json`](LightweightChat/Resources/models.json).
+Both local and distribution builds bundle this file, which the app reads at startup.
+The first model in the list is the default. Custom models remain in local settings.
+
 ## Release
 
 Before each public build, update the version metadata and commit it:

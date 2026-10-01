@@ -7,37 +7,34 @@ struct ChatMessage: Identifiable {
     var failure: String? = nil
 }
 
-struct LLMModel: Identifiable, Hashable {
+struct LLMModel: Identifiable, Hashable, Decodable {
     let id: String
     let label: String
 }
 
-let availableModels: [LLMModel] = [
-    LLMModel(id: "google/gemini-3.8-flash", label: "Gemini 3.8 Flash"),
-    LLMModel(id: "google/gemma-4-31b-it", label: "Gemma 4 31B"),
-    LLMModel(id: "x-ai/grok-4.6", label: "Grok 4.6"),
-    LLMModel(id: "minimax/minimax-m3", label: "MiniMax M3"),
-    LLMModel(id: "xiaomi/mimo-v2.6-pro", label: "MiMo 2.6 Pro"),
-    LLMModel(id: "xiaomi/mimo-v2.6-flash", label: "MiMo 2.6 Flash"),
-    LLMModel(id: "z-ai/glm-5.3-flash:nitro", label: "GLM 5.3 Flash (Nitro)"),
-    LLMModel(id: "anthropic/claude-sonnet-5.5:nitro", label: "Claude Sonnet 5.5 (Nitro)"),
-    LLMModel(id: "anthropic/claude-opus-5.5", label: "Claude Opus 5.5"),
-    LLMModel(id: "anthropic/claude-fable-5.1:nitro", label: "Claude Fable 5.1 (Nitro)"),
-    LLMModel(id: "anthropic/claude-haiku-4.5", label: "Claude Haiku 4.5"),
-    LLMModel(id: "openai/gpt-6-luna", label: "GPT-6 Luna"),
-    LLMModel(id: "openai/gpt-6-sol", label: "GPT-6 Sol"),
-    LLMModel(id: "openai/gpt-6.1-sol", label: "GPT-6.1 Sol"),
-    LLMModel(id: "openai/gpt-6-astra", label: "GPT-6 Astra"),
-    LLMModel(id: "openai/gpt-oss-120b:nitro", label: "GPT-OSS 120B (Nitro)"),
-]
+struct ModelCatalog: Decodable {
+    let models: [LLMModel]
+    let replacedModelIDs: [String: String]
 
-let replacedModelIDs: [String: String] = [
-    "anthropic/claude-sonnet-5": "anthropic/claude-sonnet-5.5:nitro",
-    "anthropic/claude-opus-5": "anthropic/claude-opus-5.5",
-    "openai/gpt-5.6-luna": "openai/gpt-6-luna",
-    "openai/gpt-5.6-terra": "openai/gpt-6-sol",
-    "openai/gpt-5.6-sol": "openai/gpt-6.1-sol",
-]
+    static let bundled: ModelCatalog = {
+        do {
+            guard let url = Bundle.main.url(forResource: "models", withExtension: "json") else {
+                fatalError("Missing bundled models.json")
+            }
+            let catalog = try JSONDecoder().decode(ModelCatalog.self, from: Data(contentsOf: url))
+            // The first model is the default selection, so the catalog cannot be empty.
+            guard !catalog.models.isEmpty else {
+                fatalError("Bundled models.json must contain at least one model")
+            }
+            return catalog
+        } catch {
+            fatalError("Could not load bundled models.json: \(error)")
+        }
+    }()
+}
+
+let availableModels = ModelCatalog.bundled.models
+let replacedModelIDs = ModelCatalog.bundled.replacedModelIDs
 
 enum CustomModels {
     static func parse(_ text: String) -> [LLMModel] {
