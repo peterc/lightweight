@@ -22,7 +22,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 @main
 struct LightweightChatApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    @StateObject private var chatVM = ChatViewModel()
     @AppStorage("background_theme") private var backgroundThemeRaw = BackgroundTheme.sunshine.rawValue
 
     private var colorScheme: ColorScheme {
@@ -32,8 +31,7 @@ struct LightweightChatApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
-                .environmentObject(chatVM)
+            ChatWindowView()
                 .preferredColorScheme(colorScheme)
                 .background(WindowAccessor())
         }
@@ -45,6 +43,16 @@ struct LightweightChatApp: App {
                 }
             }
         }
+    }
+}
+
+private struct ChatWindowView: View {
+    // Each WindowGroup window owns its conversation and active request.
+    @StateObject private var chatVM = ChatViewModel()
+
+    var body: some View {
+        ContentView()
+            .environmentObject(chatVM)
     }
 }
 
