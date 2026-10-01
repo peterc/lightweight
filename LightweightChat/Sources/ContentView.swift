@@ -77,7 +77,14 @@ struct ContentView: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 12) {
                         ForEach(vm.messages) { msg in
-                            MessageBubble(role: msg.role, content: msg.content, foregroundColor: foregroundColor, containerWidth: geo.size.width)
+                            MessageBubble(
+                                role: msg.role,
+                                content: msg.content,
+                                foregroundColor: foregroundColor,
+                                containerWidth: geo.size.width,
+                                failure: msg.failure,
+                                onRetry: msg.failure != nil && msg.id == vm.messages.last?.id && !vm.isLoading ? { vm.retry(msg.id) } : nil
+                            )
                                 .id(msg.id)
                         }
                         if !vm.streamingContent.isEmpty {
@@ -195,6 +202,8 @@ struct MessageBubble: View {
     let content: String
     let foregroundColor: Color
     var containerWidth: CGFloat = 600
+    var failure: String? = nil
+    var onRetry: (() -> Void)? = nil
 
     private var isNarrow: Bool { containerWidth < 500 }
 
@@ -203,6 +212,11 @@ struct MessageBubble: View {
             if role == "user" { Spacer(minLength: isNarrow ? 0 : 60) }
 
             VStack(alignment: .leading, spacing: 8) {
+                if failure != nil && !content.isEmpty {
+                    Label("Response interrupted", systemImage: "exclamationmark.triangle")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(foregroundColor.opacity(0.75))
+                }
                 ForEach(Array(parseBlocks(content).enumerated()), id: \.offset) { _, block in
                     switch block {
                     case .text(let str):
@@ -220,6 +234,24 @@ struct MessageBubble: View {
                             .background(foregroundColor.opacity(0.10))
                             .cornerRadius(6)
                     }
+                }
+                if let failure {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label {
+                            Text(failure).textSelection(.enabled)
+                        } icon: {
+                            Image(systemName: "exclamationmark.triangle")
+                        }
+                        if let onRetry {
+                            Button("Retry", action: onRetry)
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+                        }
+                    }
+                    .foregroundStyle(foregroundColor)
+                    .padding(10)
+                    .background(foregroundColor.opacity(0.08))
+                    .cornerRadius(6)
                 }
             }
             .padding(10)

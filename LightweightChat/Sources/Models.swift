@@ -4,6 +4,7 @@ struct ChatMessage: Identifiable {
     let id = UUID()
     let role: String // "user" or "assistant"
     let content: String
+    var failure: String? = nil
 }
 
 struct LLMModel: Identifiable, Hashable {
@@ -47,6 +48,7 @@ struct APIResponse: Decodable {
     struct Choice: Decodable {
         let message: APIMessage?
         let delta: Delta?
+        let finish_reason: String?
     }
 
     struct Delta: Decodable {

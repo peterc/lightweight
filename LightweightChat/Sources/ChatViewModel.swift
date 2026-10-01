@@ -51,17 +51,30 @@ class ChatViewModel: ObservableObject {
     func send(_ text: String) {
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         guard !isLoading else { return }
+        messages.append(ChatMessage(role: "user", content: text))
+        startRequest()
+    }
+
+    func retry(_ messageID: UUID) {
+        guard !isLoading, let last = messages.last,
+              last.id == messageID, last.failure != nil else { return }
+        messages.removeLast()
+        startRequest()
+    }
+
+    private func startRequest() {
         let requestAPIKey = apiKey
         guard !requestAPIKey.isEmpty else {
-            messages.append(ChatMessage(role: "assistant", content: "Set your OpenRouter API key in Settings (⌘,)."))
+            messages.append(ChatMessage(role: "assistant", content: "", failure: "Set your OpenRouter API key in Settings (⌘,), then retry."))
             return
         }
 
-        messages.append(ChatMessage(role: "user", content: text))
         isLoading = true
         streamingContent = ""
 
-        var history = messages.map { APIMessage(role: $0.role, content: $0.content) }
+        // Failure notices are presentation metadata, never model context.
+        var history = messages.filter { !$0.content.isEmpty }
+            .map { APIMessage(role: $0.role, content: $0.content) }
         if !systemPrompt.isEmpty {
             history.insert(APIMessage(role: "system", content: systemPrompt), at: 0)
         }
@@ -84,6 +97,7 @@ class ChatViewModel: ObservableObject {
         let body = APIRequest(model: model, messages: history, stream: true)
         request.httpBody = try? JSONEncoder().encode(body)
 
+        var accumulated = ""
         do {
             let (bytes, response) = try await URLSession.shared.bytes(for: request)
 
@@ -93,31 +107,62 @@ class ChatViewModel: ObservableObject {
                     try Task.checkCancellation()
                     errorBody += line
                 }
-                await failRequest(message: "Error \(httpResponse.statusCode): \(errorBody)", id: requestID)
+                let apiError = errorBody.data(using: .utf8)
+                    .flatMap { try? JSONDecoder().decode(APIResponse.self, from: $0) }?.error?.message
+                let message: String
+                switch httpResponse.statusCode {
+                case 401: message = "Your API key was rejected. Check it in Settings (⌘,)."
+                case 402: message = "Your OpenRouter account needs more credits."
+                case 429: message = "OpenRouter is rate limiting requests. Wait a moment, then retry."
+                default: message = apiError ?? "OpenRouter returned HTTP \(httpResponse.statusCode). Please retry."
+                }
+                await failRequest(message: message, partialContent: accumulated, id: requestID)
                 return
             }
 
             let decoder = JSONDecoder()
-            var accumulated = ""
+            var receivedCompletion = false
             for try await line in bytes.lines {
                 try Task.checkCancellation()
-                guard line.hasPrefix("data: ") else { continue }
-                let payload = String(line.dropFirst(6))
-                if payload == "[DONE]" { break }
+                guard line.hasPrefix("data:") else { continue }
+                let payload = String(line.dropFirst(5)).trimmingCharacters(in: .whitespaces)
+                if payload == "[DONE]" {
+                    receivedCompletion = true
+                    break
+                }
 
                 if let data = payload.data(using: .utf8),
-                   let chunk = try? decoder.decode(APIResponse.self, from: data),
-                   let content = chunk.choices?.first?.delta?.content {
-                    accumulated += content
-                    await queueStreamingUpdate(accumulated, id: requestID)
+                   let chunk = try? decoder.decode(APIResponse.self, from: data) {
+                    if let error = chunk.error {
+                        await failRequest(message: error.message, partialContent: accumulated, id: requestID)
+                        return
+                    }
+                    let choice = chunk.choices?.first
+                    if let content = choice?.delta?.content {
+                        accumulated += content
+                        await queueStreamingUpdate(accumulated, id: requestID)
+                    }
+                    if choice?.finish_reason == "error" {
+                        await failRequest(message: "The model provider could not finish the response.", partialContent: accumulated, id: requestID)
+                        return
+                    }
+                    if choice?.finish_reason != nil { receivedCompletion = true }
                 }
             }
 
             try Task.checkCancellation()
+            guard receivedCompletion else {
+                await failRequest(message: "The connection ended before the response finished.", partialContent: accumulated, id: requestID)
+                return
+            }
+            guard !accumulated.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                await failRequest(message: "The model returned an empty response. Please retry.", partialContent: "", id: requestID)
+                return
+            }
             await completeRequest(content: accumulated, id: requestID)
         } catch {
             if !Task.isCancelled {
-                await failRequest(message: "Error: \(error.localizedDescription)", id: requestID)
+                await failRequest(message: error.localizedDescription, partialContent: accumulated, id: requestID)
             }
         }
     }
@@ -156,9 +201,9 @@ class ChatViewModel: ObservableObject {
         finishRequest(id: id)
     }
 
-    private func failRequest(message: String, id: UUID) {
+    private func failRequest(message: String, partialContent: String, id: UUID) {
         guard activeRequestID == id else { return }
-        messages.append(ChatMessage(role: "assistant", content: message))
+        messages.append(ChatMessage(role: "assistant", content: partialContent, failure: message))
         finishRequest(id: id)
     }
 
