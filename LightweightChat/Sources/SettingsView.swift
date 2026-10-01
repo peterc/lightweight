@@ -4,6 +4,7 @@ struct SettingsView: View {
     @State private var apiKey = Keychain.load(key: "openrouter_api_key")
     @AppStorage("system_prompt") private var systemPrompt = ""
     @AppStorage("background_theme") private var backgroundTheme = BackgroundTheme.sunshine.rawValue
+    @AppStorage("custom_models") private var customModels = ""
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -57,6 +58,18 @@ struct SettingsView: View {
                         .font(.system(size: 13, design: .monospaced))
                         .frame(height: 90)
                 }
+
+                Section("Custom Models") {
+                    Text("Enter one OpenRouter model ID per line. Remove a line to remove that model.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+
+                    TextEditor(text: $customModels)
+                        .font(.system(size: 13, design: .monospaced))
+                        .autocorrectionDisabled()
+                        .accessibilityLabel("Custom OpenRouter model IDs")
+                        .frame(height: 90)
+                }
             }
             .formStyle(.grouped)
             .environment(\.defaultMinListHeaderHeight, 4)
@@ -72,8 +85,11 @@ struct SettingsView: View {
             .padding(.horizontal, 20)
             .padding(.vertical, 14)
         }
-        .frame(width: 460, height: 460)
-        .onDisappear(perform: saveAPIKey)
+        .frame(width: 460, height: 620)
+        .onDisappear {
+            saveAPIKey()
+            customModels = CustomModels.parse(customModels).map(\.id).joined(separator: "\n")
+        }
     }
 
     private func saveAPIKey() {

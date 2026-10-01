@@ -59,7 +59,12 @@ struct ContentView: View {
     @AppStorage("chat_font_size") private var fontSize: Double = 15
     @AppStorage("input_height") private var inputHeight: Double = 60
     @AppStorage("background_theme") private var backgroundThemeRaw = BackgroundTheme.sunshine.rawValue
+    @AppStorage("custom_models") private var customModelsRaw = ""
     @FocusState private var inputFocused: Bool
+
+    private var customModels: [LLMModel] {
+        CustomModels.parse(customModelsRaw)
+    }
 
     private var backgroundTheme: BackgroundTheme {
         BackgroundTheme(rawValue: backgroundThemeRaw) ?? .sunshine
@@ -152,6 +157,13 @@ struct ContentView: View {
                     ForEach(availableModels) { model in
                         Button(model.label) { vm.selectedModel = model }
                     }
+                    if !customModels.isEmpty {
+                        Section("Custom Models") {
+                            ForEach(customModels) { model in
+                                Button(model.label) { vm.selectedModel = model }
+                            }
+                        }
+                    }
                 } label: {
                     Text(vm.selectedModel.label)
                 }
@@ -161,7 +173,13 @@ struct ContentView: View {
                 }
             }
         }
-        .onAppear { inputFocused = true }
+        .onAppear {
+            inputFocused = true
+            vm.reconcileCustomModels(customModels)
+        }
+        .onChange(of: customModelsRaw) { _, _ in
+            vm.reconcileCustomModels(customModels)
+        }
         .background {
             // Hidden buttons to capture Cmd+= and Cmd+-
             Button("") { fontSize = min(fontSize + 2, 32) }
