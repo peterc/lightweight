@@ -17,14 +17,9 @@ class ChatViewModel: ObservableObject {
 
     init() {
         let savedID = UserDefaults.standard.string(forKey: "selected_model") ?? ""
-        let customModels = CustomModels.parse(UserDefaults.standard.string(forKey: "custom_models") ?? "")
-        // Keep saved built-in selections when their default routing changes.
-        let alternativeID = savedID.hasSuffix(":nitro") ? String(savedID.dropLast(6)) : "\(savedID):nitro"
-        let previousBaseID = savedID.hasSuffix(":nitro") ? alternativeID : savedID
-        self.selectedModel = (availableModels + customModels).first { $0.id == savedID }
-            ?? availableModels.first { $0.id == alternativeID }
-            ?? availableModels.first { $0.id == replacedModelIDs[previousBaseID] }
-            ?? availableModels[0]
+        let catalog = ModelCatalogStore.shared.catalog
+        let customModels = CustomModels.parse(UserDefaults.standard.string(forKey: "custom_models") ?? "", excluding: catalog.models)
+        self.selectedModel = catalog.selection(for: savedID, customModels: customModels)
 
         // Migrate API key from UserDefaults to Keychain
         if let oldKey = UserDefaults.standard.string(forKey: "openrouter_api_key"), !oldKey.isEmpty {
@@ -45,9 +40,9 @@ class ChatViewModel: ObservableObject {
         UserDefaults.standard.string(forKey: "system_prompt") ?? ""
     }
 
-    func reconcileCustomModels(_ customModels: [LLMModel]) {
-        guard !(availableModels + customModels).contains(where: { $0.id == selectedModel.id }) else { return }
-        selectedModel = availableModels[0]
+    func reconcileModels(_ catalog: ModelCatalog, customModels: [LLMModel]) {
+        let selection = catalog.selection(for: selectedModel.id, customModels: customModels)
+        if selection != selectedModel { selectedModel = selection }
     }
 
     func reset() {

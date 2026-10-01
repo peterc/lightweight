@@ -12,33 +12,47 @@ struct LLMModel: Identifiable, Hashable, Decodable {
     let label: String
 }
 
-struct ModelCatalog: Decodable {
+struct ModelCatalog: Decodable, Equatable {
     let models: [LLMModel]
     let replacedModelIDs: [String: String]
+
+    static func decode(_ data: Data) throws -> ModelCatalog {
+        let catalog = try JSONDecoder().decode(ModelCatalog.self, from: data)
+        let ids = Set(catalog.models.map(\.id))
+        guard !catalog.models.isEmpty,
+              ids.count == catalog.models.count,
+              catalog.models.allSatisfy({ !$0.id.isEmpty && !$0.label.isEmpty &&
+                  $0.id.rangeOfCharacter(from: .whitespacesAndNewlines) == nil }),
+              catalog.replacedModelIDs.allSatisfy({ !$0.key.isEmpty && ids.contains($0.value) }) else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+        return catalog
+    }
+
+    func selection(for savedID: String, customModels: [LLMModel]) -> LLMModel {
+        let alternativeID = savedID.hasSuffix(":nitro") ? String(savedID.dropLast(6)) : "\(savedID):nitro"
+        let previousBaseID = savedID.hasSuffix(":nitro") ? alternativeID : savedID
+        return (models + customModels).first { $0.id == savedID }
+            ?? models.first { $0.id == alternativeID }
+            ?? models.first { $0.id == replacedModelIDs[previousBaseID] }
+            ?? models[0]
+    }
 
     static let bundled: ModelCatalog = {
         do {
             guard let url = Bundle.main.url(forResource: "models", withExtension: "json") else {
                 fatalError("Missing bundled models.json")
             }
-            let catalog = try JSONDecoder().decode(ModelCatalog.self, from: Data(contentsOf: url))
-            // The first model is the default selection, so the catalog cannot be empty.
-            guard !catalog.models.isEmpty else {
-                fatalError("Bundled models.json must contain at least one model")
-            }
-            return catalog
+            return try decode(Data(contentsOf: url))
         } catch {
             fatalError("Could not load bundled models.json: \(error)")
         }
     }()
 }
 
-let availableModels = ModelCatalog.bundled.models
-let replacedModelIDs = ModelCatalog.bundled.replacedModelIDs
-
 enum CustomModels {
-    static func parse(_ text: String) -> [LLMModel] {
-        var seen = Set(availableModels.map(\.id))
+    static func parse(_ text: String, excluding builtInModels: [LLMModel] = []) -> [LLMModel] {
+        var seen = Set(builtInModels.map(\.id))
         return text.components(separatedBy: .newlines).compactMap { line in
             let id = line.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !id.isEmpty, seen.insert(id).inserted else { return nil }

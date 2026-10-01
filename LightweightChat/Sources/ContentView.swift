@@ -54,6 +54,7 @@ enum BackgroundTheme: String, CaseIterable, Identifiable {
 
 struct ContentView: View {
     @EnvironmentObject var vm: ChatViewModel
+    @ObservedObject private var modelCatalog = ModelCatalogStore.shared
     @State private var input = ""
     @State private var showSettings = false
     @AppStorage("chat_font_size") private var fontSize: Double = 15
@@ -63,7 +64,7 @@ struct ContentView: View {
     @FocusState private var inputFocused: Bool
 
     private var customModels: [LLMModel] {
-        CustomModels.parse(customModelsRaw)
+        CustomModels.parse(customModelsRaw, excluding: modelCatalog.catalog.models)
     }
 
     private var backgroundTheme: BackgroundTheme {
@@ -154,7 +155,7 @@ struct ContentView: View {
                 .disabled(vm.messages.isEmpty && vm.streamingContent.isEmpty)
 
                 Menu {
-                    ForEach(availableModels) { model in
+                    ForEach(modelCatalog.catalog.models) { model in
                         Button(model.label) { vm.selectedModel = model }
                     }
                     if !customModels.isEmpty {
@@ -175,10 +176,14 @@ struct ContentView: View {
         }
         .onAppear {
             inputFocused = true
-            vm.reconcileCustomModels(customModels)
+            vm.reconcileModels(modelCatalog.catalog, customModels: customModels)
+        }
+        .task { await modelCatalog.refreshIfNeeded() }
+        .onChange(of: modelCatalog.catalog) { _, _ in
+            vm.reconcileModels(modelCatalog.catalog, customModels: customModels)
         }
         .onChange(of: customModelsRaw) { _, _ in
-            vm.reconcileCustomModels(customModels)
+            vm.reconcileModels(modelCatalog.catalog, customModels: customModels)
         }
         .background {
             // Hidden buttons to capture Cmd+= and Cmd+-

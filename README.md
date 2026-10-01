@@ -41,8 +41,16 @@ make run
 
 The built-in model list and old model ID replacements live in
 [`LightweightChat/Resources/models.json`](LightweightChat/Resources/models.json).
-Both local and distribution builds bundle this file, which the app reads at startup.
-The first model in the list is the default. Custom models remain in local settings.
+Both local and distribution builds bundle this file as the default catalog.
+On opening a chat window, the app checks the same file on `main` through
+`raw.githubusercontent.com`, at most once every 24 hours across all windows and
+launches (including failed checks). Valid updates refresh open windows and are
+cached in `~/Library/Caches/org.peterc.lightweight/models.json`. Offline or invalid
+responses leave the current catalog intact; an absent or invalid cache falls back
+to the bundled file. The first model in the list is the default. Custom models
+remain in local settings. Push catalog changes to `main` to publish an update.
+
+Run the catalog refresh checks with `python3 tests/check_model_catalog.py`.
 
 ## Release
 
